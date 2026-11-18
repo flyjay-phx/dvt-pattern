@@ -1,0 +1,22 @@
+{
+  "name": "dvt-pattern",
+  "version": "1.0.0",
+  "description": "디어밸리 터치앤고: 피닉스 디어밸리 공항(KDVT)에서 세스나 172로 이착륙·터치앤고를 연습하는 3D 멀티플레이 웹",
+  "main": "server.js",
+  "type": "module",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node --test --test-force-exit tests/*.test.js"
+  },
+  "license": "MIT",
+  "private": true,
+  "engines": { "node": ">=20.12" },
+  "dependencies": {
+    "express": "^5.1.0",
+    "pg": "^8.16.0",
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "pg-mem": "^3.0.5"
+  }
+}

@@ -1,0 +1,172 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>디어밸리 터치앤고 · KDVT 세스나 172</title>
+  <meta name="description" content="피닉스 디어밸리 공항(KDVT)에서 세스나 172로 이착륙과 터치앤고를 연습하는 3D 멀티플레이 웹. 실제 시간의 해·달, 실제 METAR 바람, 관제 무전, 착륙 채점." />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%2311161d'/%3E%3Cpath d='M8 36h48M30 18l4 18-4 10' stroke='%23ffb547' stroke-width='5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css" />
+  <link rel="stylesheet" href="style.css" />
+  <script type="importmap">
+    { "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.169.0/build/three.module.js", "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.169.0/examples/jsm/" } }
+  </script>
+</head>
+<body>
+  <canvas id="view" aria-label="3D 비행 화면"></canvas>
+
+  <!-- 비행 중 화면 -->
+  <div id="hud" hidden>
+    <div class="chips">
+      <span class="chip" id="c-time">KDVT --:--</span>
+      <span class="chip" id="c-wind">바람 --</span>
+      <span class="chip strong" id="c-rwy">활주로 --</span>
+      <button class="chip btn" id="c-atis" title="ATIS 듣기 (I)">ATIS -</button>
+      <span class="chip" id="c-online">접속 1명</span>
+    </div>
+    <div class="topbtns">
+      <button class="icon" id="b-board" title="착륙 기록판 (L)">기록판</button>
+      <button class="icon" id="b-settings" title="설정 (Esc)">설정</button>
+      <button class="icon" id="b-help" title="조작법 (H)">조작법</button>
+    </div>
+    <div class="tape" id="tape"></div>
+    <section class="coach" id="coach" aria-live="polite"></section>
+    <canvas id="minimap" width="220" height="220" aria-label="공항 지도"></canvas>
+    <section class="radio" id="radio">
+      <div class="radio-log" id="radio-log" aria-live="polite"></div>
+      <form id="chat-form" class="chat-form" autocomplete="off">
+        <input id="chat" maxlength="120" placeholder="Enter: 무전 채팅 (다른 조종사에게 보임)" />
+      </form>
+    </section>
+    <div id="warn" class="warn" hidden></div>
+    <div id="toast" class="toast" hidden></div>
+    <section id="checklist" class="checklist" hidden></section>
+    <div class="panel-wrap"><canvas id="panel" aria-label="계기판"></canvas></div>
+  </div>
+
+  <!-- 시작 화면 -->
+  <section id="menu" class="menu">
+    <div class="menu-card">
+      <p class="kicker">PHOENIX DEER VALLEY · KDVT · CESSNA 172</p>
+      <h1>디어밸리 <span>터치앤고</span></h1>
+      <p class="lead">애리조나 사막의 디어밸리 공항에서 세스나 172로 패턴을 돌며 이착륙을 연습합니다. 해와 달은 현지 시간대로 움직이고, 바람은 실제 관측값으로 바뀝니다.</p>
+      <div class="wx" id="menu-wx">KDVT 날씨를 불러오는 중…</div>
+      <form id="start-form" class="start" autocomplete="off">
+        <label>닉네임 <input id="f-nick" maxlength="16" required placeholder="예: 영준" /></label>
+        <label>기체 번호 <input id="f-tail" maxlength="6" pattern="N[0-9A-Z]{2,5}" required /></label>
+        <label>활주로
+          <select id="f-pair">
+            <option value="south">남쪽 7R/25L · 8,196ft</option>
+            <option value="north">북쪽 7L/25R · 4,500ft</option>
+          </select>
+        </label>
+        <label>연습
+          <select id="f-mode">
+            <option value="normal">터치앤고 (보통)</option>
+            <option value="engine_out">엔진 고장 (다운윈드에서 꺼짐)</option>
+          </select>
+        </label>
+        <button class="primary" type="submit">엔진 시동 · 활주로로</button>
+      </form>
+      <div class="menu-links">
+        <button class="link" id="m-board" type="button">착륙 기록판</button>
+        <button class="link" id="m-help" type="button">조작법</button>
+      </div>
+      <p class="fine">연습용 시뮬레이터입니다. 실제 비행 교육이나 항법에 쓰지 마세요. 활주로 배치·방위는 공개 자료 기준 대략값입니다.</p>
+    </div>
+  </section>
+
+  <!-- 착륙 결과 -->
+  <section id="result" class="result" hidden></section>
+
+  <!-- 설정 -->
+  <section id="settings" class="sheet" hidden aria-label="설정">
+    <div class="sheet-card">
+      <header><h2>설정</h2><button class="x" data-close>닫기</button></header>
+      <div class="group">
+        <h3>시간 (해 뜨고 짐)</h3>
+        <div class="seg"><label><input type="radio" name="time" value="real" checked /> 피닉스 실제 시간</label><label><input type="radio" name="time" value="manual" /> 직접 정하기</label></div>
+        <input type="range" id="s-hour" min="0" max="24" step="0.25" value="12" />
+        <p class="hint" id="s-hour-label"></p>
+      </div>
+      <div class="group">
+        <h3>바람</h3>
+        <div class="seg"><label><input type="radio" name="wind" value="metar" checked /> 실제 KDVT METAR</label><label><input type="radio" name="wind" value="manual" /> 연습: 직접 정하기</label></div>
+        <div class="grid3">
+          <label>풍향 <output id="o-dir"></output><input type="range" id="s-dir" min="0" max="350" step="10" value="250" /></label>
+          <label>풍속 <output id="o-kt"></output><input type="range" id="s-kt" min="0" max="25" step="1" value="8" /></label>
+          <label>돌풍 <output id="o-gust"></output><input type="range" id="s-gust" min="0" max="35" step="1" value="0" /></label>
+        </div>
+        <button class="ghost" id="s-xwind" type="button">측풍 연습 세팅 (활주로 직각 12kt, 돌풍 18kt)</button>
+      </div>
+      <div class="group">
+        <h3>보기·소리</h3>
+        <div class="toggles">
+          <label><input type="checkbox" id="t-coach" checked /> 패턴 코치</label>
+          <label><input type="checkbox" id="t-pattern" checked /> 패턴 안내선</label>
+          <label><input type="checkbox" id="t-voice" checked /> 관제 음성</label>
+          <label><input type="checkbox" id="t-sound" checked /> 엔진 소리</label>
+        </div>
+      </div>
+      <div class="row">
+        <button class="ghost" id="s-reset" type="button">활주로로 돌아가기 (R)</button>
+        <button class="ghost" id="s-menu" type="button">처음 화면</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- 기록판 -->
+  <section id="board" class="sheet" hidden aria-label="착륙 기록판">
+    <div class="sheet-card wide">
+      <header><h2>착륙 기록판</h2><button class="x" data-close>닫기</button></header>
+      <div class="tabs" role="tablist">
+        <button data-range="today" class="on">오늘</button>
+        <button data-range="week">이번 주</button>
+        <button data-range="all">전체</button>
+        <button data-range="me">내 로그북</button>
+      </div>
+      <div id="board-body" class="board-body"></div>
+    </div>
+  </section>
+
+  <!-- 리플레이 -->
+  <section id="replay" class="sheet" hidden aria-label="리플레이">
+    <div class="sheet-card wide">
+      <header><h2 id="replay-title">리플레이</h2><button class="x" data-close>닫기</button></header>
+      <canvas id="replay-canvas" class="replay-canvas"></canvas>
+      <div class="row"><button class="ghost" id="replay-play" type="button">재생</button><input type="range" id="replay-scrub" min="0" max="100" value="100" /></div>
+    </div>
+  </section>
+
+  <!-- 조작법 -->
+  <section id="help" class="sheet" hidden aria-label="조작법">
+    <div class="sheet-card">
+      <header><h2>조작법 (키보드)</h2><button class="x" data-close>닫기</button></header>
+      <table class="keys">
+        <tr><td><kbd>S</kbd> / <kbd>W</kbd></td><td>당기기(기수 들기) / 밀기</td></tr>
+        <tr><td><kbd>A</kbd> / <kbd>D</kbd></td><td>왼쪽 / 오른쪽으로 기울이기</td></tr>
+        <tr><td><kbd>Q</kbd> / <kbd>E</kbd></td><td>러더 (지상에선 앞바퀴 조향)</td></tr>
+        <tr><td><kbd>↑</kbd> / <kbd>↓</kbd></td><td>스로틀 올리기 / 내리기</td></tr>
+        <tr><td><kbd>F</kbd> / <kbd>V</kbd></td><td>플랩 내리기 / 올리기 (0·10·20·30°)</td></tr>
+        <tr><td><kbd>[</kbd> / <kbd>]</kbd></td><td>트림 (기수 내림 / 들림)</td></tr>
+        <tr><td><kbd>B</kbd> (누르고 있기)</td><td>브레이크</td></tr>
+        <tr><td><kbd>C</kbd></td><td>시점 바꾸기: 뒤 → 조종석 → 관제탑</td></tr>
+        <tr><td>마우스 드래그</td><td>뒤 시점에서 둘러보기</td></tr>
+        <tr><td><kbd>K</kbd></td><td>착륙 전 체크리스트 (1~5로 체크)</td></tr>
+        <tr><td><kbd>I</kbd></td><td>ATIS 듣기</td></tr>
+        <tr><td><kbd>M</kbd></td><td>지도 크게/작게</td></tr>
+        <tr><td><kbd>R</kbd></td><td>활주로로 돌아가기</td></tr>
+        <tr><td><kbd>Enter</kbd></td><td>무전 채팅</td></tr>
+        <tr><td><kbd>Esc</kbd></td><td>설정 (시간·바람)</td></tr>
+      </table>
+      <p class="hint">처음이면: ↑를 길게 눌러 풀 스로틀 → 55kt에서 S를 살짝 → 74kt로 상승 → 노란 안내선을 따라 한 바퀴 → 파이널 65kt, 플랩 30° → 바닥 근처에서 ↓로 출력 줄이고 S로 살짝 당기기.</p>
+    </div>
+  </section>
+
+  <noscript>이 페이지는 자바스크립트가 필요합니다.</noscript>
+  <script type="module" src="app.js"></script>
+</body>
+</html>
